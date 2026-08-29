@@ -13,16 +13,16 @@ requirements baseline or from published infrastructure facts.
 
 ## 1. Non-functional targets
 
-| ID | Property | Target | Build class | Priority |
-|---|---|---|---|---|
-| NFR-01 | Registry portal availability | 99.9% | MODEL | not stated |
-| NFR-02 | Live-view availability per feed, excluding camera and network faults | 99.5% | MODEL | not stated |
-| NFR-03 | Frame capture → operator alert | p95 < 3 s | LIVE | not stated |
-| NFR-04 | Plate query across 90 days of events | p95 < 5 s | LIVE + SIM | not stated |
-| NFR-05 | Live-view stream start | < 2 s | LIVE | not stated |
-| NFR-06 | Metadata tier disaster recovery | RPO 5 min / RTO 30 min | MODEL | not stated |
-| NFR-07 | Graceful degradation | Operable at 30% feed loss, with cause attribution per unavailable feed | LIVE | Must |
-| NFR-08 | Horizontal scale-out | New node joins by registration, no central reconfiguration | MODEL | Must |
+| ID | Property | Target | SLI / measurement method | Build class | Priority |
+|---|---|---|---|---|---|
+| NFR-01 | Registry portal availability | 99.9% | Successful-request ratio over a rolling window (window TBD, see gap below) | MODEL | not stated |
+| NFR-02 | Live-view availability per feed, excluding camera and network faults | 99.5% | Per-feed stream-active ratio, faults attributed per `NFR-07`, from `REG-20` health signals | MODEL | not stated |
+| NFR-03 | Frame capture → operator alert | p95 < 3 s | Alert-event timestamp minus capture timestamp, p95; arithmetic in `HLD.md` §6, measured via §3's load test | LIVE | not stated |
+| NFR-04 | Plate query across 90 days of events | p95 < 5 s | Query response time, p95; §3's load test (corpus-cardinality caveat below applies) | LIVE + SIM | not stated |
+| NFR-05 | Live-view stream start | < 2 s | Time from stream request to first rendered frame; instrumented at the Live View Gateway (WS-2 LLD) | LIVE | not stated |
+| NFR-06 | Metadata tier disaster recovery | RPO 5 min / RTO 30 min | Replication lag (RPO proxy) + measured failover duration (RTO); design in WS-6 LLD §2–§3 | MODEL | not stated |
+| NFR-07 | Graceful degradation | Operable at 30% feed loss, with cause attribution per unavailable feed | Core-function pass/fail under a synthetic 30%-feed-kill test, plus attribution-correctness rate; test named in `SCOPE.md` risk `R-03`, not yet run | LIVE | Must |
+| NFR-08 | Horizontal scale-out | New node joins by registration, no central reconfiguration | Central-config diff is empty after a registration event (binary, per-registration); sequence in WS-6 LLD §3.1 | MODEL | Must |
 
 Gaps in the target definitions, carried forward as work to do:
 
@@ -154,13 +154,153 @@ method named above. This is unresolved.
 
 ---
 
-## 4. What this file does not settle
+## 5. Multi-point scaling curve
+
+Same method as §2, applied at five milestones: 1 (single dev/demo camera),
+100 (early pilot), 7,000 (≈ VISWAS Phase 1), 17,500 (≈ full VISWAS), 80,000
+(challenge target). Figures below hold the same tier ratio as §2.1 (10%
+full-rate / 37.5% sampled / 52.5% event-triggered); all `ASSUMED` except the
+80,000 row, which restates §2's `GIVEN`/derived figures.
+
+### 5.1 Tier population (proportional)
+
+| Cameras | Full-rate (10%) | Sampled (37.5%) | Event-triggered (52.5%) |
+|---|---|---|---|
+| 1 | 1 (treated as full-rate — ASSUMED, the tier split is moot at n=1) | 0 | 0 |
+| 100 | 10 | 38 | 52 |
+| 7,000 | 700 | 2,625 | 3,675 |
+| 17,500 | 1,750 | 6,563 | 9,187 |
+| 80,000 | 8,000 (GIVEN) | 30,000 (GIVEN) | 42,000 (GIVEN) |
+
+### 5.2 GPU budget (same formula as §2.4)
+
+| Cameras | GPUs | Notes |
+|---|---|---|
+| 1 | 1 (floor) | Formula gives <1; a demo needs at least one GPU regardless of the arithmetic |
+| 100 | ~2 (floor) | Formula gives 1.05; a minimum-viable-node floor applies below this |
+| 7,000 | ~74 | Naive proportional — see §5.4, this is an upper bound in practice |
+| 17,500 | ~184 | Naive proportional — see §5.4, this is an upper bound in practice |
+| 80,000 | 838 (GIVEN, §2.4) | |
+
+### 5.3 Metadata-plane load (events from the full-rate tier only, per §2.3's method)
+
+| Cameras | Events/day | Avg events/s | Peak events/s (×4) | JSON volume/day |
+|---|---|---|---|---|
+| 1 | 25,920 | 0.3 | 1.2 | ~13 KB |
+| 100 | 259,200 | 3 | 12 | ~130 MB |
+| 7,000 | 18,144,000 | 210 | 840 | ~9.1 GB |
+| 17,500 | 45,360,000 | 525 | 2,100 | ~22.7 GB |
+| 80,000 | 207,360,000 (GIVEN, §2.3) | 2,400 | ~10,000 | ~103.7 GB (GIVEN) |
+
+### 5.4 The VISWAS caveat — 7,000 and 17,500 are not hypothetical
+
+Unlike the other three rows, 7,000 and 17,500 aren't "what if we had this
+many cameras" — they are the actual size of VISWAS Phase 1 and full VISWAS
+(kickoff §1.2). Per [ADR 0005](../architecture/adr/0005-edge-central-split.md)
+and [`OPEN-QUESTIONS.md`](../architecture/OPEN-QUESTIONS.md) OQ-003, VISWAS
+cameras are bridged: their analytics already run under ITMS, not netra-setu's
+own Analytics Runtime. §5.1/§5.2's proportional figures for these two rows
+are therefore an **upper bound that will not be procured in practice** at
+those literal rollout points — the real GPU need at "VISWAS fully onboarded,
+zero delta cameras yet" is closer to the cost of *bridging* (metadata
+ingestion only, no inference) than to the 74/184 GPUs shown. The 80,000-row
+is the only one where the full formula is known to apply, because by then
+all ~62,500 delta cameras (which *do* need our inference) are onboarded too.
+`OPEN-QUESTIONS.md` OQ-009 tracks resolving the exact split.
+
+---
+
+## 6. Netram-node resource envelope and cost sketch
+
+### 6.1 Resource envelope per node, at full 80,000-camera scale
+
+| Resource | Per node (of 34) | Basis |
+|---|---|---|
+| GPUs | ~25 | 838 ÷ 34 (§2.4) — pending OQ-009's downward revision |
+| Cameras served | ~2,353 | 80,000 ÷ 34 — ASSUMED even distribution across nodes |
+| Hot storage, 24h–72h window | 50.8 TB – 152.5 TB | Derivation: §6.2 |
+| Warm storage, ~30 days, physical (post erasure-coding) | ≈ 2.1 PB | Derivation: §6.2 |
+
+The even-distribution assumption is known to be wrong in one direction
+already: VISWAS is deployed across all 34 districts today (kickoff §1.2), so
+its ~17,500 cameras are already spread statewide, not concentrated. A
+100-camera early pilot, by contrast, more plausibly concentrates on 1–3
+nodes rather than spreading 3 cameras across all 34 — the per-node figures
+above are the 80,000-camera steady state, not every milestone in §5.
+
+### 6.2 Hot/warm storage derivation
+
+```
+Per camera: 2 Mbps × 3,600 s/hour ÷ 8 = 900 MB/hour = 21.6 GB/day
+            (continuous recording, blended bitrate — ASSUMED, same figure as §2.1)
+
+Hot tier (24-72h window, VMS-18, edge-resident):
+  Lower bound (24h):  21.6 GB × 1 day   = 21.6 GB/camera
+  Upper bound (72h):  21.6 GB × 3 days  = 64.8 GB/camera
+  At 80,000 cameras:  1.73 PB – 5.18 PB fleet-wide, split across 34 nodes
+  Per node (÷34):     50.8 TB – 152.5 TB
+
+Warm tier (~30 days, VMS-18):
+  21.6 GB/day × 30 days = 648 GB/camera
+  At 80,000 cameras:     51.8 PB fleet-wide raw — the same arithmetic as
+                         §2.2's rejected-centralised-option calculation,
+                         same numbers, different conclusion: this is what
+                         is actually built, distributed across 34 edge
+                         sites instead of centralised in one place. Warm
+                         tier is edge-resident, not central — `VMS-16`'s
+                         "no raw video path to the state tier other than
+                         VMS-17 triggers" applies to it exactly as it does
+                         to the hot tier (corrected 2026-08-29; see
+                         `HLD.md` §3's SVC-011 row).
+  × 1.375 (EC 8+3):      ≈ 71.3 PB physical, fleet-wide
+  Per node (÷34):        ≈ 2.1 PB physical per node
+```
+
+2.1 PB of erasure-coded warm storage at each of 34 sites is a serious
+procurement line, not a footnote — the direct, honest consequence of
+holding ~30 days of raw video per camera at all. Only reachable if the
+retention window or the erasure-coding overhead is revisited later, not if
+the number is wished away now.
+
+### 6.3 Cost sketch — illustrative structure only, not a quote
+
+No verified procurement pricing exists anywhere in this repo. The structure
+below is a placeholder for real quotes, not a budget, and should not be
+copied into a submission as a number:
+
+```
+Total cost ≈ (GPU count × GPU unit cost)
+            + (physical storage, PB × cost per PB)
+            + (34 × per-node rack/power/networking overhead)
+            + GSWAN bandwidth (likely already-sunk state infrastructure, CMP-08)
+
+  838 GPUs (pending OQ-009) × [ILLUSTRATIVE ONLY — L4-class unit cost varies
+              by region, volume and date; get a real OEM/data-centre quote,
+              do not reuse any figure quoted here]
+  + ≈71.3 PB warm + ≈5.2 PB hot (upper bound), physical,
+              × [ILLUSTRATIVE ONLY — cost per PB for erasure-coded object
+              storage on commodity hardware; get a real quote]
+  + 34 sites × [ILLUSTRATIVE ONLY — rack/power/cooling/networking overhead]
+```
+
+Every bracketed term is a placeholder, not a number. Filling in a total
+here without a real quote would itself violate this file's "every number
+carries its derivation" rule.
+
+---
+
+## 7. What this file does not settle
 
 - Edge buffer capacity in hours for `VMS-08`. Not stated in the baseline.
-- Storage sizing for the tiers that are actually built — §2.2 sizes only the
-  rejected centralised option. Hot-tier (24–72 h) and warm-tier (~30 days)
-  volumes under `VMS-16`/`VMS-17` retrieval triggers are not yet derived.
 - Whether ~90 streams/GPU at 2 fps holds on the intended hardware. It is the
   single least-supported number in the model and it moves 333 of the 838 GPUs.
 - Availability targets NFR-01 and NFR-02 have no error budget, no measurement
   window and no dependency model behind them.
+- `OPEN-QUESTIONS.md` OQ-009: the VISWAS-vs-tier overlap. Until resolved, the
+  838-GPU figure and the §6.1 resource envelope are upper bounds, not
+  validated targets.
+- Real procurement pricing for every bracketed placeholder in §6.3.
+- The even-distribution-across-34-nodes assumption (§6.1) — known to not
+  hold for VISWAS-scale milestones, untested for the actual rollout sequence
+  (which depends on `SCOPE.md`'s roadmap, itself pending team-size/timeline
+  input — see `OPEN-QUESTIONS.md` OQ-011).

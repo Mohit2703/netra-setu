@@ -70,25 +70,40 @@ features. Treat the deliverable as covering `REG-01`–`REG-23`.
 
 | WS | Scope | Requirement IDs |
 |---|---|---|
-| WS-1 Registry & GIS | Data model, onboarding, validation and deduplication, PostGIS viewsheds, gap and cut-set analysis, reports | `REG-*` |
-| WS-2 Ingestion & Streaming | Connector SDK, edge agent, store-and-forward, WebRTC delivery, health monitoring | `VMS-01`–`VMS-09`, `REG-20` |
-| WS-3 Analytics | ANPR, vehicle attributes, specified-event detection, adaptive tiering, model cards | `VMS-10`–`VMS-15`, `CMP-16` |
+| WS-1 Registry & GIS | Data model, onboarding, validation and deduplication, spatial viewsheds, gap and cut-set analysis, reports, hardware compliance & health aggregation | `REG-*` |
+| WS-2 Ingestion & Streaming | Connector SDK, edge agent, store-and-forward, WebRTC delivery, tiered storage and retention | `VMS-01`–`VMS-09`, `VMS-16`–`VMS-20` |
+| WS-3 Analytics | ANPR, vehicle attributes, specified-event detection, adaptive tiering, model cards, alert routing and disposition | `VMS-10`–`VMS-15`, `VMS-24`, `CMP-16` |
 | WS-4 Bridge & Tracking | Road-graph binding, geometry-constrained candidate generation, route reconstruction, reverse gap feedback | `BRG-*`, `VMS-21`, `VMS-22` |
-| WS-5 Security, Forensics & Compliance | Authorisation gate, audit, oversight dashboard, hashing, Merkle anchoring, evidence packaging, compliance artefacts | `SEC-*`, `FOR-*`, `CMP-*` |
+| WS-5 Security, Forensics & Compliance | Authorisation gate, audit, oversight dashboard, hashing, Merkle anchoring, evidence packaging, external system integration adapters, compliance artefacts | `SEC-*`, `FOR-*`, `CMP-01`–`CMP-15`, `VMS-23` |
 | WS-6 Scale, Ops & Narrative | Simulated fleet, load tests, capacity model, disaster-recovery design | `NFR-*`, [CAPACITY.md](CAPACITY.md) §2–§3, §1 of this file |
 
-### Coverage gaps in the workstream allocation
+### Workstream ownership — resolved 2026-08-29
 
-| Unassigned | Requirements |
-|---|---|
-| Storage and retention | `VMS-16`, `VMS-17`, `VMS-18`, `VMS-19`, `VMS-20` — no workstream claims these |
-| External system integration | `VMS-23` — no workstream claims it |
-| Alert routing and disposition | `VMS-24` — no workstream claims it |
+Previously unassigned (`VMS-16`–`VMS-20`, `VMS-23`, `VMS-24`) and
+double-claimed (`REG-20`, `REG-21`) requirements, resolved while drafting the
+LLDs (`docs/architecture/lld/`), per
+[`OPEN-QUESTIONS.md`](../architecture/OPEN-QUESTIONS.md) OQ-004:
 
-`REG-20` is claimed twice: by WS-1 through the `REG-*` wildcard and by WS-2
-explicitly. `REG-21` is claimed only by the WS-1 wildcard although it is
-operationally adjacent to WS-2. Both need resolving before ownership means
-anything.
+- **Storage and retention** (`VMS-16`–`VMS-20`) → WS-2. The storage tiers
+  (hot at the edge, warm/cold central) are the direct continuation of the
+  ingestion pipeline WS-2 already owns, not a separate concern.
+- **External system integration** (`VMS-23`: VAHAN/SARTHI/eGujCop-CCTNS-ICJS/
+  AFIS-NAFIS) → WS-5. These adapters are used primarily to validate a case
+  reference (`SEC-08`) and for forensic identification (AFIS/NAFIS) — closer
+  to WS-5's authorisation/forensics concerns than to ingestion.
+- **Alert routing and disposition** (`VMS-24`) → WS-3. Alerts are analytics
+  output; disposition capture directly feeds model evaluation and per-camera
+  threshold tuning (`R-07`'s mitigation), an analytics-quality concern.
+- **`REG-20`** (health monitoring) → WS-1 owns the requirement — aggregation
+  and presentation, `SVC-003` in `HLD.md`. WS-2's Edge Agent is the raw
+  *signal source* it depends on, not a second owner. Resolves the
+  double-claim: one requirement, one owner, one documented dependency.
+- **`REG-21`** (maintenance workflow, SLA clock, MTTR) → stays WS-1. It
+  consumes WS-1's own `REG-20` aggregation, not WS-2 directly —
+  "operationally adjacent to WS-2" doesn't require reassignment.
+
+All 101 requirement IDs now have exactly one owning workstream. No orphans,
+no double-claims.
 
 ---
 
@@ -151,6 +166,37 @@ model trained on either dataset must record its provenance under `CMP-16`.
 
 ---
 
+## 7. Roadmap — Stage 1 and Stage 2 milestones
+
+Relative sequence, not calendar dates — [`OPEN-QUESTIONS.md`](../architecture/OPEN-QUESTIONS.md)
+OQ-011 (real Stage 1/2 dates, team size/parallelism) is still open. Ordered
+by dependency, not by workstream number: `M0`/`M1` (WS-1) must precede
+`M2` (WS-2) per the "Model 1 first, ships cleanly, admits Model 4 without a
+rewrite" constraint (`CLAUDE.md`; kickoff §2); everything from `M3` onward
+can run in parallel across workstream owners if the team supports it
+(OQ-011), or sequentially if it doesn't — the milestones themselves don't
+change either way, only their calendar spacing.
+
+| Milestone | Scope | Workstream | Satisfies (deliverable, `SCOPE.md` §2) |
+|---|---|---|---|
+| `M0` | Registry MVP: identity, bulk/manual/API onboarding, basic dedup | WS-1 | Sample onboarded camera-metadata dataset |
+| `M1` | Registry complete: GIS/viewshed, gap + cut-set analysis, hardware compliance | WS-1 | Working registry portal with GIS map view; sample gap-analysis report; registry API docs |
+| `M2` | VMS ingestion foundation: connector SDK, edge agent, 20–50 real feeds live, WebRTC view, simulated-fleet driver online | WS-2 | Working centralised VMS prototype across multi-department feeds |
+| `M3` | Analytics online: ANPR + specified-event detection on real+simulated feeds, alert routing | WS-3 | ANPR demonstration |
+| `M4` | Bridge & tracking: road-graph binding, candidate-set generation, staged multi-camera vehicle run | WS-4 | Multi-location vehicle-tracking demonstration |
+| `M5` | Security/forensics: authorisation gate, audit, evidence export, chain of custody, demonstrated refusal | WS-5 | Security architecture document; a demonstrated unauthorised-request refusal |
+| `M6` | Scale & DR: 500–2,000-camera load test, capacity/DR docs finalised | WS-6 | Scalability/load-test report; disaster-recovery design |
+| `M7` | Live-demo hardening: graceful degradation under induced packet loss/feed kills, false-positive tuning, gated face-match demo, full P3-scenario and P1-gap-to-tender walkthroughs | All | Stage 2 readiness |
+
+`M0`–`M1` is Stage 1's likely centre of gravity given "Model 1 first"; `M2`–`M6`
+scale with however much of Stage 1's window remains. `M7` is squarely Stage
+2 — it exists only to rehearse the two end-to-end scenarios `HLD.md` already
+walks on paper (§5.4's P3 route-reconstruction flow; `REG-16`'s gap report
+feeding a P1 tender decision) against a live, degrading network, per the
+kickoff's own framing: "the finale is live, not slides."
+
+---
+
 ## What this file does not cover
 
 - Per-requirement build class. That is in the Notes column of
@@ -161,4 +207,5 @@ model trained on either dataset must record its provenance under `CMP-16`.
   The operative constraints are carried as requirements (`VMS-12` named events
   only, `VMS-13` and `SEC-10` watchlist gating); the exclusion rationale is not
   recorded here.
-- Schedule, staffing and ownership.
+- Calendar dates, staffing and per-workstream ownership for §7's roadmap —
+  pending [`OPEN-QUESTIONS.md`](../architecture/OPEN-QUESTIONS.md) OQ-011.

@@ -29,22 +29,25 @@ until the `CAPACITY.md` §3 load test runs.
 
 ## 1. Domain model and ubiquitous language
 
-Six bounded contexts, matching the workstream split resolved in
-[OQ-004](OPEN-QUESTIONS.md) (WS-1..WS-6). Each owns its entities; no entity is
-written by two contexts.
+Five entity-owning bounded contexts, matching WS-1..WS-5 as finally resolved
+in [OQ-004](OPEN-QUESTIONS.md) (2026-08-29, at LLD-authoring time). Each owns
+its entities; no entity is written by two contexts. WS-6 (Scale, Ops &
+Narrative) is a cross-cutting testing/capacity concern spanning all five —
+it owns no domain entity of its own.
 
-| Context (≈ workstream) | Entities owned | Requirement IDs |
+| Context (workstream) | Entities owned | Requirement IDs |
 |---|---|---|
-| Registry & GIS (WS-1) | `Camera`, `Owner`, `Site`, `HardwareRecord`, `Viewshed`, `MergeQueueEntry` | `REG-01`–`REG-19` |
-| Ingestion & Streaming (WS-2) | `Connector`, `Feed`, `HealthCheck`, `EdgeBuffer` | `VMS-01`–`VMS-09`, `REG-20`–`REG-21` (per OQ-004, reassigned here) |
-| Analytics (WS-3) | `AnalyticsEvent`, `ModelArtefact`, `DetectionRecord` | `VMS-10`–`VMS-15` |
+| Registry & GIS (WS-1) | `Camera`, `Owner`, `Site`, `HardwareRecord`, `Viewshed`, `MergeQueueEntry` | `REG-01`–`REG-23` |
+| Ingestion & Streaming (WS-2) | `Connector`, `Feed`, `HealthCheck` (source only — WS-1 aggregates), `EdgeBuffer`, `StorageTier`, `RetentionPolicy`, `CaseLink`, `DeletionCertificate` | `VMS-01`–`VMS-09`, `VMS-16`–`VMS-20` |
+| Analytics (WS-3) | `AnalyticsEvent`, `ModelArtefact`, `DetectionRecord`, `AlertDisposition` | `VMS-10`–`VMS-15`, `VMS-24`, `CMP-16` |
 | Bridge & Tracking (WS-4) | `RoadSegment`, `CutSetResult`, `CandidateSet`, `TrackingRoute` | `BRG-01`–`BRG-05`, `VMS-21`–`VMS-22` |
-| Storage & Retention (WS-2, per OQ-004) | `StorageTier`, `RetentionPolicy`, `CaseLink`, `DeletionCertificate` | `VMS-16`–`VMS-20` |
-| Security, Forensics & Compliance (WS-5) | `Jurisdiction`, `Purpose`, `AuthorizationRequest`, `BreakGlassGrant`, `WatchlistEntry`, `AuditEvent`, `SegmentHash`, `MerkleRoot`, `EvidenceExport`, `ChainOfCustodyEntry` | `SEC-*`, `FOR-*` |
-| Integrations (WS-2, per OQ-004) | `ExternalCaseRef`, `AlertDisposition` | `VMS-23`–`VMS-24` |
+| Security, Forensics & Compliance (WS-5) | `Jurisdiction`, `Purpose`, `AuthorizationRequest`, `BreakGlassGrant`, `WatchlistEntry`, `AuditEvent`, `SegmentHash`, `MerkleRoot`, `EvidenceExport`, `ChainOfCustodyEntry`, `ExternalCaseRef` | `SEC-*`, `FOR-*`, `CMP-01`–`CMP-15`, `VMS-23` |
 
 `ComplianceRecord` (`REG-03`) is a projection read by the Security/Forensics
-context, not owned by it — Registry remains the sole writer.
+context, not owned by it — Registry remains the sole writer. `CaseLink`
+(WS-2, retention join) references `ExternalCaseRef` (WS-5, case identity) by
+ID across the context boundary — ordinary cross-context reference, not
+shared ownership.
 
 **Core vocabulary:**
 
@@ -126,13 +129,14 @@ flowchart TB
         AN["SVC-008<br/>Analytics Runtime<br/>tiered inference"]
         LVG["SVC-009<br/>Live View Gateway"]
         HOTS[("Hot storage<br/>24-72h")]
+        WARMS[("Warm storage<br/>~30 days")]
     end
 
     subgraph STATE["State tier — Gandhinagar (across GSWAN — metadata + on-demand video only)"]
         BUS["SVC-010<br/>Metadata Event Bus"]
         REGC["SVC-001..004<br/>Registry Core, GIS &amp; Coverage,<br/>Hardware Compliance, Portal"]
         STM["SVC-011<br/>Storage Tier Manager"]
-        WARMS[("Warm / cold storage")]
+        COLDS[("Cold archive<br/>evidence-flagged only")]
         BTS["SVC-012<br/>Bridge &amp; Tracking"]
         AUTHZ["SVC-013<br/>Authorization / PDP"]
         AUDIT["SVC-014<br/>Audit &amp; Oversight"]
@@ -145,6 +149,7 @@ flowchart TB
     DELTAX --> CONN --> AGENT
     VISWASX --> BRIDGE --> AGENT
     AGENT --> AN --> HOTS
+    HOTS -->|local migration, VMS-18| WARMS
     AN -->|events only, never raw video| BUS
     AGENT --> LVG
     NTPX -.->|clock sync| AGENT
@@ -152,8 +157,10 @@ flowchart TB
     BUS --> REGC
     BUS --> ALERT
     BUS --> BTS --> FOR
-    AGENT -.->|on-demand retrieval, VMS-17 triggers only| STM
-    STM --> WARMS
+    STM -.->|manages tier policy for| HOTS
+    STM -.->|manages tier policy for| WARMS
+    WARMS -.->|evidence-flagged subset only, VMS-17/FOR-04| COLDS
+    AGENT -.->|on-demand retrieval, VMS-17 triggers only| BUS
     REGC --> AUTHZ
     AUTHZ -.->|gates| BTS
     AUTHZ -.->|gates| WL
@@ -178,11 +185,11 @@ platform-wide.
 | SVC-004 | Registry Portal (web UI) | `REG-13`, `REG-19`; P1/P4/P5 screens | State |
 | SVC-005 | Connector SDK / vendor adapter framework | `VMS-01`–`VMS-06` | Edge |
 | SVC-006 | Edge Agent (outbound-only, store-and-forward) | `VMS-07`, `VMS-08`, `REG-20` (signal source) | Edge |
-| SVC-007 | ITMS/VISWAS Bridge Connector | `OQ-003` (no requirement ID yet — see [§7](#7-key-decisions--pending-checkpoint) decision 4) | Edge |
+| SVC-007 | ITMS/VISWAS Bridge Connector | `OQ-003` (no requirement ID yet — see [ADR 0004](adr/0004-vendor-connector-port.md)) | Edge |
 | SVC-008 | Analytics Runtime (tiered inference) | `VMS-10`–`VMS-15` | Edge |
 | SVC-009 | Live View Gateway (WebRTC/HLS) | `VMS-09` | Edge |
 | SVC-010 | Metadata Event Bus / ingestion API | `VMS-16` | State |
-| SVC-011 | Storage Tier Manager (hot/warm/cold) | `VMS-17`–`VMS-20` | Both (hot at edge, warm/cold central) |
+| SVC-011 | Storage Tier Manager (hot/warm/cold) | `VMS-17`–`VMS-20` | Both — hot **and warm** at the edge (`VMS-16` keeps raw video off GSWAN by default; corrected 2026-08-29, warm is not central); only cold (evidence-flagged subset) is centrally/cross-site replicated |
 | SVC-012 | Bridge & Tracking Service | `BRG-01`–`BRG-05`, `VMS-21`, `VMS-22` | State |
 | SVC-013 | Authorization / Policy Decision Point | `SEC-07`–`SEC-09` | State |
 | SVC-014 | Audit & Oversight Service | `SEC-11`–`SEC-15` | State |

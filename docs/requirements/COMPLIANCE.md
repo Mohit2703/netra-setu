@@ -59,6 +59,22 @@ presented as a legal conclusion.
 
 ---
 
+## Architecture cross-references (added 2026-08-29)
+
+Where the `docs/architecture/` decisions made since this file was written
+bear directly on a control here. Adding an ADR/LLD reference does not change
+a row's `⚠ Requires external verification` status — none of this has been
+reviewed by qualified counsel.
+
+| ID | Architecture reference | Note |
+|---|---|---|
+| `CMP-04`, `CMP-05` | [ADR 0007](../architecture/adr/0007-evidence-chain-of-custody.md) | Anchoring mechanism (transparency log + RFC 3161) designed specifically to give `FOR-05`'s certificate something a court can recognise, alongside `FOR-08`'s independent-verifiability property. Does not resolve whether the certificate actually satisfies BSA 2023 s.63 — still unverified. |
+| `CMP-07` (technical half) | [ADR 0008](../architecture/adr/0008-camera-trust-bootstrap.md) | Tiered trust bootstrap is the "reasonable security practice" for camera authentication specifically; the personnel-access-policy half remains unowned. |
+| `CMP-08` | `HLD.md` §3/§4 storage-tier correction (2026-08-29) | Warm-tier storage (~30 days) confirmed edge-resident, not central — strengthens, not weakens, "no raw video egress" once state-network transport is confirmed for the edge sites themselves. |
+| `CMP-15` | [WS-6 LLD](../architecture/lld/ws6-scale-ops-narrative.md) §2/§3 | First disaster-recovery design sketch (`NFR-06`) exists — active/standby metadata-tier replication, ~16–32 min estimated RTO against a 30 min target. `ASSUMED`, not load-tested; split-brain fencing explicitly not yet designed. Segmentation (`SEC-06`) and key management (`SEC-05`) still undesigned beyond the ADR-deferred product choice. |
+
+---
+
 ## What this file does not cover
 
 - Whether any of these instruments applies to this platform, to its operator, or

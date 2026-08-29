@@ -3,6 +3,19 @@
 Append as you go. Resolve in place with the answer and the date.
 Never delete an entry.
 
+**Index of items still OPEN, by who can answer them** (updated 2026-08-29;
+resolved entries are kept below for history per the rule above, not indexed
+here):
+
+| # | Item | Answerable by |
+|---|---|---|
+| OQ-006 | New requirement ID for the "real personal data" exclusion | User |
+| OQ-007 | `UVH-26`/`BMD-45` dataset licences | User (or Claude, if asked to research) |
+| OQ-009 | VISWAS-vs-tier overlap (affects the GPU budget) | **Organiser** — needs real VISWAS deployment data |
+| OQ-010 | New `synthetic` field to distinguish load-test cameras | User |
+| OQ-011 | Stage 1/2 dates, team size/parallelism | User |
+| OQ-012 | FFmpeg licensing in the simulated-fleet driver | User (or Claude, if asked to research) |
+
 ---
 
 ## OQ-001 — Requirements register predates its own cited source
@@ -108,6 +121,16 @@ is double-claimed by WS-1 and WS-2; `REG-21` sits only under WS-1's wildcard
 despite being operationally WS-2's concern. Deferred to the LLD-authoring
 phase, not fixed yet.
 
+**2026-08-29 — resolution:** fixed while starting LLD authoring. `VMS-16`–
+`VMS-20` → WS-2 (storage is the ingestion pipeline's continuation). `VMS-23`
+→ WS-5 (validates case references for `SEC-08`; AFIS/NAFIS is forensic
+identification). `VMS-24` → WS-3 (alerts are analytics output; disposition
+feeds model evaluation, `R-07`). `REG-20` → WS-1 owns the requirement
+(aggregation, `SVC-003`); WS-2's Edge Agent is a signal source, not a second
+owner. `REG-21` → stays WS-1, consumes WS-1's own `REG-20` aggregation. All
+101 IDs now have exactly one owning workstream — see `SCOPE.md` §3 and
+`HLD.md` §1.
+
 ## OQ-005 — Traceability table location
 
 **Status:** ASSUMED 2026-08-29 — two-way door, easily revisited
@@ -201,3 +224,36 @@ Not inventing a requirement ID or schema field per
 `.claude/rules/requirements.md` — candidate: an amendment to `REG-03`'s
 data-model requirement, or a new `REG-` row. Needs the user's call before
 it's created.
+
+## OQ-011 — Stage 1/Stage 2 dates and team size, needed for `SCOPE.md`'s roadmap
+
+**Status:** OPEN — standing item, blocks calendar dates only
+**Raised:** 2026-08-29
+
+Two facts needed to write `SCOPE.md`'s roadmap/milestones section with real
+dates rather than relative ordering: actual Stage 1 submission / Stage 2
+finale dates beyond "expected start September 2026," and whether this is
+built solo or by a team that can own workstreams (WS-1..WS-6) in parallel.
+Neither blocks any architecture work done so far — `HLD.md`, the ADRs and
+the LLDs are all date- and team-size-independent. `SCOPE.md`'s roadmap
+(added 2026-08-29) is written as a relative milestone sequence (M0/M1/M2...)
+specifically so it doesn't have to wait on this. Revisit once either fact is
+known — the milestones don't change, only their calendar placement and
+whether workstreams run sequentially or in parallel.
+
+## OQ-012 — FFmpeg licensing, surfaced during the §8 verification pass
+
+**Status:** OPEN — standing item, non-blocking
+**Raised:** 2026-08-29
+
+`CAPACITY.md` §3's load-test plan and [ADR 0009](adr/0009-simulated-fleet-architecture.md)
+both name FFmpeg as the tool that loops recorded files to drive the
+simulated-fleet driver. `CLAUDE.md`'s "open source only... flag any
+dependency whose licence is unclear" constraint applies: FFmpeg's licence is
+LGPL by default but becomes GPL if built with certain optional components
+enabled, and some bundled codecs carry their own patent/licensing questions
+depending on jurisdiction and build configuration. Not yet checked which
+build configuration this project would actually need (which codecs the
+recorded test files require). Low urgency — FFmpeg here is a load-test tool,
+not a component of the shipped product — but flagged now rather than left
+implicit, per the same rule that caught `UVH-26`/`BMD-45` (`OQ-007`).
